@@ -5,14 +5,14 @@ const io = require("socket.io")(server, {
     cors: { origin: "*" }
 });
 
-// Use the environment's port or default to 3000
+// Render will provide the PORT
 const PORT = process.env.PORT || 3000;
 
 io.on('connection', (socket) => {
-    console.log('A device connected:', socket.id);
+    console.log('Device connected:', socket.id);
 
+    // Relay signaling data between peers
     socket.on('signal', (data) => {
-        console.log('Relaying signal...');
         socket.broadcast.emit('signal', data);
     });
 

@@ -2,140 +2,42 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AirBridge P2P</title>
     <style>
-        :root { 
-            --bg: #0a0a0c; 
-            --container: #15151a; 
-            --accent: #6d28d9; 
-            --text: #e2e8f0;
-        }
-        body { 
-            font-family: 'Inter', system-ui, sans-serif; 
-            background: radial-gradient(circle at top, #1e1b4b, #0a0a0c); 
-            display: flex; flex-direction: column; align-items: center; 
-            padding: 20px; color: var(--text); min-height: 100vh; margin: 0;
-        }
-        
-        .container { 
-            background: var(--container); 
-            padding: 1.5rem; border-radius: 20px; 
-            border: 1px solid #2d2d3a;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5); 
-            width: 90%; max-width: 400px; text-align: center; 
-        }
-        
-        h2 { margin-top: 0; color: #fff; }
-        
-        #status { font-size: 0.75rem; padding: 5px 12px; border-radius: 99px; margin-bottom: 20px; display: inline-block; font-weight: 500; text-transform: uppercase; }
-        .connected { background: #1e3a2b; color: #6ee7b7; border: 1px solid #065f46; }
-        .disconnected { background: #450a0a; color: #fca5a5; border: 1px solid #991b1b; }
-
-        #drop-zone { 
-            border: 2px dashed #3f3f46; border-radius: 16px; 
-            padding: 50px 20px; cursor: pointer; transition: all 0.2s; 
-            margin: 20px 0; color: #71717a;
-            -webkit-tap-highlight-color: transparent;
-        }
-        #drop-zone:hover, #drop-zone:active { border-color: var(--accent); background: #181820; color: var(--accent); }
-        
-        progress { width: 100%; height: 8px; border-radius: 4px; overflow: hidden; appearance: none; margin-bottom: 20px; }
-        progress::-webkit-progress-bar { background: #27272a; }
-        progress::-webkit-progress-value { background: var(--accent); }
-
-        .file-item { margin-top: 15px; font-size: 0.85rem; padding: 10px; background: #181820; border-radius: 8px; border: 1px solid #27272a; text-align: left; word-break: break-all; }
-        a { color: #a78bfa; font-weight: 600; text-decoration: none; }
+        body { background: #0a0a0c; color: #e2e8f0; font-family: sans-serif; display: flex; justify-content: center; padding: 20px; }
+        .container { background: #15151a; padding: 20px; border-radius: 15px; width: 100%; max-width: 400px; text-align: center; }
+        #status { padding: 10px; border-radius: 5px; margin-bottom: 20px; }
+        .connected { background: #065f46; }
+        .disconnected { background: #991b1b; }
     </style>
 </head>
 <body>
-
     <div class="container">
         <h2>AirBridge</h2>
         <div id="status" class="disconnected">Waiting for Peer...</div>
-        
-        <div id="drop-zone" onclick="document.getElementById('fileInput').click()">
-            <p>Tap to Select or Drop File</p>
-        </div>
-        <input type="file" id="fileInput" style="display:none">
-        
-        <progress id="progressBar" value="0" max="100" style="display:none"></progress>
-        <div id="fileList"></div>
+        <input type="file" id="fileInput">
     </div>
 
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/simple-peer/9.11.1/simplepeer.min.js"></script>
-
     <script>
-        // REPLACE THIS URL with your live cloud link once deployed:
-        const socket = io("http://localhost:3000"); 
-        
-        const status = document.getElementById('status');
-        const progress = document.getElementById('progressBar');
-        const fileInput = document.getElementById('fileInput');
-        const dropZone = document.getElementById('drop-zone');
-        const fileList = document.getElementById('fileList');
-        
-        const CHUNK_SIZE = 16384; 
-        let incomingChunks = [];
+        // REPLACE THIS URL with your Render URL (e.g., https://airbridge-signaling.onrender.com)
+        const socket = io("https://airbridge-signaling.onrender.com"); 
 
         const peer = new SimplePeer({ 
             initiator: location.hash === '#1', 
             trickle: false,
-            config: {
-                iceServers: [
-                    { urls: 'stun:stun.l.google.com:19302' },
-                    { urls: 'stun:stun1.l.google.com:19302' }
-                ]
-            }
+            config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }
         });
 
         peer.on('signal', data => socket.emit('signal', data));
         socket.on('signal', data => peer.signal(data));
 
         peer.on('connect', () => {
-            status.className = 'connected';
-            status.innerText = 'Connected: Ready to Transfer';
+            const s = document.getElementById('status');
+            s.className = 'connected'; s.innerText = 'Connected: Ready to Transfer';
         });
-
-        dropZone.ondragover = (e) => e.preventDefault();
-        dropZone.ondrop = (e) => { e.preventDefault(); handleFile(e.dataTransfer.files[0]); };
-        fileInput.onchange = (e) => handleFile(e.target.files[0]);
-
-        peer.on('data', data => {
-            if (typeof data === 'string') {
-                const msg = JSON.parse(data);
-                if (msg.type === 'start') {
-                    incomingChunks = [];
-                    fileList.innerHTML += `<div class="file-item">Receiving: ${msg.name}...</div>`;
-                } else if (msg.type === 'end') {
-                    const url = URL.createObjectURL(new Blob(incomingChunks));
-                    fileList.innerHTML += `<div class="file-item">Received: <a href="${url}" download="${msg.name}">Download ${msg.name}</a></div>`;
-                    progress.style.display = 'none';
-                }
-            } else {
-                incomingChunks.push(data);
-            }
-        });
-
-        function handleFile(file) {
-            if (!file) return;
-            progress.style.display = 'block';
-            progress.value = 0;
-            peer.send(JSON.stringify({ type: 'start', name: file.name }));
-            
-            const reader = new FileReader();
-            let offset = 0;
-            function readNext() { reader.readAsArrayBuffer(file.slice(offset, offset + CHUNK_SIZE)); }
-            reader.onload = (e) => {
-                peer.send(e.target.result);
-                offset += e.target.result.byteLength;
-                progress.value = (offset / file.size) * 100;
-                if (offset < file.size) readNext();
-                else peer.send(JSON.stringify({ type: 'end', name: file.name }));
-            };
-            readNext();
-        }
     </script>
 </body>
 </html>
