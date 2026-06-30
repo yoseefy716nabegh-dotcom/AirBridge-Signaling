@@ -30,8 +30,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/simple-peer/9.11.1/simplepeer.min.js"></script>
     <script>
         const socket = io("https://airbridge-signaling.onrender.com");
-        
-        // Force reliable data channel
         const peer = new SimplePeer({ 
             initiator: location.hash === '#1', 
             trickle: false,
@@ -49,7 +47,6 @@
         let receivedChunks = [];
         let fileName = "";
 
-        // RECEIVING
         peer.on('data', data => {
             if (typeof data === 'string') {
                 const msg = JSON.parse(data);
@@ -76,7 +73,6 @@
             }
         });
 
-        // SENDING
         document.getElementById('fileInput').addEventListener('change', (e) => {
             const file = e.target.files[0];
             peer.send(JSON.stringify({ type: 'start', name: file.name }));
@@ -95,8 +91,12 @@
                 offset += e.target.result.byteLength;
                 document.getElementById('logArea').innerText = `Sending: ${Math.round((offset/file.size)*100)}%`;
                 
-                if (offset < file.size) readNext();
-                else peer.send(JSON.stringify({ type: 'end', name: file.name }));
+                if (offset < file.size) {
+                    // Small delay to ensure the control messages don't get blocked
+                    setTimeout(readNext, 50);
+                } else {
+                    peer.send(JSON.stringify({ type: 'end', name: file.name }));
+                }
             };
             readNext();
         });
