@@ -1,16 +1,14 @@
 {
   "name": "AirBridge P2P",
   "short_name": "AirBridge",
-  "start_url": "index.html",
+  "start_url": "/AirBridge-Signaling/index.html",
   "display": "standalone",
   "background_color": "#0f172a",
-  "theme_color": "#8b5cf6",
   "icons": [
     {
-      "src": "icon-512.png",
+      "src": "/AirBridge-Signaling/icon-512.png",
       "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any maskable"
+      "type": "image/png"
     }
   ]
 }

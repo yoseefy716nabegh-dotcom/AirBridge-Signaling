@@ -3,8 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="manifest" href="manifest.json">
-    <title>AirBridge P2P</title>
+    <link rel="manifest" href="manifest.json"> 
+    <script>
+    // Change this line:
+    if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js'); 
+    </script>
     <style>
         :root { --bg: #0f172a; --card: #1e293b; --accent: #8b5cf6; --text: #f8fafc; }
         body { background: var(--bg); color: var(--text); font-family: sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
