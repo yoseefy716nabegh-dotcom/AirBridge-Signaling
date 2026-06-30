@@ -11,7 +11,7 @@
         .status-badge { padding: 6px 16px; border-radius: 50px; font-size: 0.8rem; font-weight: 600; display: inline-block; margin-bottom: 20px; background: #ef4444; }
         .connected { background: #10b981; }
         .drop-zone { border: 2px dashed #475569; padding: 40px; border-radius: 16px; cursor: pointer; margin: 20px 0; transition: border 0.3s; }
-        .drop-zone:hover { border-color: var(--accent); }
+        .drop-zone.dragover { border-color: var(--accent); background: #2d3748; }
         #downloadBtn { display: none; background: var(--accent); color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-weight: 600; margin-top: 10px; width: 100%; }
         #logArea { font-size: 0.9rem; color: #94a3b8; margin-top: 10px; min-height: 1.2em; }
     </style>
@@ -20,8 +20,8 @@
     <div class="card">
         <h1>AirBridge</h1>
         <div id="status" class="status-badge">Disconnected</div>
-        <div class="drop-zone" onclick="document.getElementById('fileInput').click()">
-            <p>Click to select file</p>
+        <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+            <p>Drag & drop or Click</p>
             <input type="file" id="fileInput" style="display:none">
         </div>
         <div id="logArea"></div>
@@ -33,6 +33,7 @@
     <script>
         const socket = io("https://airbridge-signaling.onrender.com");
         const peer = new SimplePeer({ initiator: location.hash === '#1', trickle: false });
+        const dropZone = document.getElementById('dropZone');
         
         peer.on('signal', data => socket.emit('signal', data));
         socket.on('signal', data => peer.signal(data));
@@ -43,11 +44,46 @@
             status.innerText = 'Connected';
         });
 
+        // Drag and Drop Logic
+        ['dragover', 'dragleave', 'drop'].forEach(evt => {
+            dropZone.addEventListener(evt, e => {
+                e.preventDefault();
+                if (evt === 'dragover') dropZone.classList.add('dragover');
+                else dropZone.classList.remove('dragover');
+            });
+        });
+
+        dropZone.addEventListener('drop', e => {
+            handleFile(e.dataTransfer.files[0]);
+        });
+
+        document.getElementById('fileInput').addEventListener('change', (e) => {
+            handleFile(e.target.files[0]);
+        });
+
+        function handleFile(file) {
+            if (!file) return;
+            const encoder = new TextEncoder();
+            peer.send(encoder.encode(JSON.stringify({ type: 'start', name: file.name })));
+            let offset = 0;
+            const reader = new FileReader();
+            const sendNext = () => reader.readAsArrayBuffer(file.slice(offset, offset + 16384));
+
+            reader.onload = (e) => {
+                peer.send(e.target.result);
+                offset += e.target.result.byteLength;
+                document.getElementById('logArea').innerText = `Sending: ${Math.round((offset/file.size)*100)}%`;
+                if (offset < file.size) setTimeout(sendNext, 40);
+                else setTimeout(() => peer.send(encoder.encode(JSON.stringify({ type: 'end' }))), 500);
+            };
+            sendNext();
+        }
+
         let receivedChunks = [];
         let fileName = "";
 
         peer.on('data', data => {
-            if (data[0] === 123) { // Detect JSON start character
+            if (data[0] === 123) {
                 const msg = JSON.parse(new TextDecoder().decode(data));
                 if (msg.type === 'start') {
                     receivedChunks = []; fileName = msg.name;
@@ -67,25 +103,6 @@
                 receivedChunks.push(data);
                 document.getElementById('logArea').innerText = "Progress: " + receivedChunks.length + " chunks";
             }
-        });
-
-        document.getElementById('fileInput').addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            const encoder = new TextEncoder();
-            peer.send(encoder.encode(JSON.stringify({ type: 'start', name: file.name })));
-            
-            let offset = 0;
-            const reader = new FileReader();
-            const sendNext = () => reader.readAsArrayBuffer(file.slice(offset, offset + 16384));
-
-            reader.onload = (e) => {
-                peer.send(e.target.result);
-                offset += e.target.result.byteLength;
-                document.getElementById('logArea').innerText = `Sending: ${Math.round((offset/file.size)*100)}%`;
-                if (offset < file.size) setTimeout(sendNext, 40);
-                else setTimeout(() => peer.send(encoder.encode(JSON.stringify({ type: 'end' }))), 500);
-            };
-            sendNext();
         });
     </script>
 </body>
