@@ -9,34 +9,27 @@
         body { background: var(--bg); color: var(--text); font-family: sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
         .card { background: var(--card); padding: 2rem; border-radius: 24px; width: 90%; max-width: 400px; text-align: center; box-shadow: 0 10px 25px rgba(0,0,0,0.3); }
         .status-badge { padding: 6px 16px; border-radius: 50px; font-size: 0.8rem; font-weight: 600; display: inline-block; margin-bottom: 20px; }
-        .disconnected { background: #ef4444; }
         .connected { background: #10b981; }
         .drop-zone { border: 2px dashed #475569; padding: 40px; border-radius: 16px; cursor: pointer; margin: 20px 0; }
-        button { background: var(--accent); color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: 600; margin-top: 10px; }
     </style>
 </head>
 <body>
     <div class="card">
         <h1>AirBridge</h1>
-        <div id="status" class="status-badge disconnected">Disconnected</div>
+        <div id="status" class="status-badge">Disconnected</div>
         <div class="drop-zone" onclick="document.getElementById('fileInput').click()">
             <p>Click to select file</p>
             <input type="file" id="fileInput" style="display:none">
         </div>
-        <div id="fileInfo">No file selected</div>
+        <div id="fileInfo"></div>
     </div>
 
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/simple-peer/9.11.1/simplepeer.min.js"></script>
     <script>
-        // REPLACE with your Render URL
         const socket = io("https://airbridge-signaling.onrender.com");
-        
-        const peer = new SimplePeer({ 
-            initiator: location.hash === '#1', 
-            trickle: false,
-            config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }
-        });
+        const peer = new SimplePeer({ initiator: location.hash === '#1', trickle: false });
+        let incomingChunks = [];
 
         peer.on('signal', data => socket.emit('signal', data));
         socket.on('signal', data => peer.signal(data));
@@ -46,27 +39,32 @@
             document.getElementById('status').innerText = 'Connected';
         });
 
-        // Receiving data
+        // Receiving
         peer.on('data', data => {
+            incomingChunks.push(data);
+            alert("Data chunk received! Total chunks: " + incomingChunks.length);
+            
             const btn = document.createElement('button');
-            btn.innerText = "Download Received File";
+            btn.innerText = "Download File";
             btn.onclick = () => {
-                const blob = new Blob([data]);
+                const blob = new Blob(incomingChunks);
                 const a = document.createElement('a');
                 a.href = URL.createObjectURL(blob);
-                a.download = 'airbridge-file';
+                a.download = 'transferred-file';
                 a.click();
             };
             document.querySelector('.card').appendChild(btn);
         });
 
-        // Sending data
+        // Sending
         document.getElementById('fileInput').addEventListener('change', (e) => {
             const file = e.target.files[0];
-            if (file) {
-                document.getElementById('fileInfo').innerText = "Sending: " + file.name;
-                peer.send(file);
-            }
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                peer.send(event.target.result);
+                document.getElementById('fileInfo').innerText = "Sent: " + file.name;
+            };
+            reader.readAsArrayBuffer(file);
         });
     </script>
 </body>
