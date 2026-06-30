@@ -8,40 +8,37 @@
         :root { --bg: #0f172a; --card: #1e293b; --accent: #8b5cf6; --text: #f8fafc; }
         body { background: var(--bg); color: var(--text); font-family: sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
         .card { background: var(--card); padding: 2rem; border-radius: 24px; width: 90%; max-width: 400px; text-align: center; box-shadow: 0 10px 25px rgba(0,0,0,0.3); }
-        .status-badge { padding: 6px 16px; border-radius: 50px; font-size: 0.8rem; font-weight: 600; display: inline-block; margin-bottom: 10px; background: #ef4444; }
+        .status-badge { padding: 6px 16px; border-radius: 50px; font-size: 0.8rem; font-weight: 600; display: inline-block; margin-bottom: 20px; background: #ef4444; }
         .connected { background: #10b981; }
-        .drop-zone { border: 2px dashed #475569; padding: 30px; border-radius: 16px; cursor: pointer; margin: 15px 0; }
-        progress { width: 100%; height: 20px; border-radius: 10px; overflow: hidden; }
-        button { background: var(--accent); color: white; border: none; padding: 12px; border-radius: 8px; cursor: pointer; font-weight: 600; margin-top: 10px; width: 100%; }
+        .drop-zone { border: 2px dashed #475569; padding: 40px; border-radius: 16px; cursor: pointer; margin: 20px 0; transition: border 0.3s; }
+        .drop-zone:hover { border-color: var(--accent); }
+        
+        /* Modern Progress Bar */
+        #progressContainer { width: 100%; height: 8px; background: #334155; border-radius: 4px; overflow: hidden; margin: 15px 0; display: none; }
+        #progressBar { height: 100%; width: 0%; background: var(--accent); transition: width 0.2s; }
+        
+        button { background: var(--accent); color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-weight: 600; margin-top: 10px; width: 100%; display: none; }
     </style>
 </head>
 <body>
     <div class="card">
         <h1>AirBridge</h1>
-        <div id="status" class="status-badge">Disconnected</div><br>
-        <button onclick="copyLink()">Copy Room Link</button>
+        <div id="status" class="status-badge">Disconnected</div>
         <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
             <p>Drag & drop or Click</p>
             <input type="file" id="fileInput" style="display:none">
         </div>
-        <progress id="progressBar" value="0" max="100" style="display:none"></progress>
-        <div id="logArea"></div>
-        <button id="downloadBtn" style="display:none">Download File</button>
+        <div id="progressContainer"><div id="progressBar"></div></div>
+        <div id="logArea" style="font-size: 0.8rem; color: #94a3b8;"></div>
+        <button id="downloadBtn">Download File</button>
     </div>
 
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/simple-peer/9.11.1/simplepeer.min.js"></script>
     <script>
-        const roomID = Math.random().toString(36).substring(7);
         const socket = io("https://airbridge-signaling.onrender.com");
         const peer = new SimplePeer({ initiator: location.hash === '#1', trickle: false });
         
-        function copyLink() {
-            const url = window.location.origin + window.location.pathname + "#" + roomID;
-            navigator.clipboard.writeText(url);
-            alert("Room link copied! Open this on your other device.");
-        }
-
         peer.on('signal', data => socket.emit('signal', data));
         socket.on('signal', data => peer.signal(data));
 
@@ -50,10 +47,9 @@
             document.getElementById('status').innerText = 'Connected';
         });
 
-        // Simplified Sending with Progress Bar
         function handleFile(file) {
+            document.getElementById('progressContainer').style.display = "block";
             const progressBar = document.getElementById('progressBar');
-            progressBar.style.display = "block";
             const encoder = new TextEncoder();
             peer.send(encoder.encode(JSON.stringify({ type: 'start', name: file.name })));
             
@@ -64,23 +60,26 @@
             reader.onload = (e) => {
                 peer.send(e.target.result);
                 offset += e.target.result.byteLength;
-                progressBar.value = (offset / file.size) * 100;
+                progressBar.style.width = ((offset / file.size) * 100) + "%";
+                
                 if (offset < file.size) setTimeout(sendNext, 40);
-                else peer.send(encoder.encode(JSON.stringify({ type: 'end' })));
+                else {
+                    peer.send(encoder.encode(JSON.stringify({ type: 'end' })));
+                    document.getElementById('logArea').innerText = "Transfer Complete!";
+                }
             };
             sendNext();
         }
 
-        // ... (Keep existing Drop/Receive logic) ...
-        document.getElementById('dropZone').addEventListener('drop', e => { e.preventDefault(); handleFile(e.dataTransfer.files[0]); });
-        document.getElementById('fileInput').addEventListener('change', e => handleFile(e.target.files[0]));
-        
-        // RECEIVE (Condensed)
+        // Logic for Receiving
         let receivedChunks = [];
         peer.on('data', data => {
             if (data[0] === 123) {
                 const msg = JSON.parse(new TextDecoder().decode(data));
-                if (msg.type === 'end') {
+                if (msg.type === 'start') {
+                    receivedChunks = [];
+                    document.getElementById('logArea').innerText = "Receiving: " + msg.name;
+                } else if (msg.type === 'end') {
                     document.getElementById('downloadBtn').style.display = "block";
                     document.getElementById('downloadBtn').onclick = () => {
                         const a = document.createElement('a');
@@ -88,8 +87,15 @@
                         a.download = "downloaded_file"; a.click();
                     };
                 }
-            } else { receivedChunks.push(data); }
+            } else {
+                receivedChunks.push(data);
+                document.getElementById('logArea').innerText = "Received: " + receivedChunks.length + " chunks";
+            }
         });
+
+        document.getElementById('dropZone').addEventListener('drop', e => { e.preventDefault(); handleFile(e.dataTransfer.files[0]); });
+        document.getElementById('fileInput').addEventListener('change', e => handleFile(e.target.files[0]));
+        ['dragover', 'dragleave'].forEach(evt => document.getElementById('dropZone').addEventListener(evt, e => e.preventDefault()));
     </script>
 </body>
 </html>
