@@ -11,8 +11,7 @@
         .status-badge { padding: 6px 16px; border-radius: 50px; font-size: 0.8rem; font-weight: 600; display: inline-block; margin-bottom: 20px; }
         .disconnected { background: #ef4444; }
         .connected { background: #10b981; }
-        .drop-zone { border: 2px dashed #475569; padding: 40px; border-radius: 16px; cursor: pointer; transition: 0.3s; margin: 20px 0; }
-        .drop-zone:hover { border-color: var(--accent); background: #334155; }
+        .drop-zone { border: 2px dashed #475569; padding: 40px; border-radius: 16px; cursor: pointer; margin: 20px 0; }
     </style>
 </head>
 <body>
@@ -29,9 +28,7 @@
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/simple-peer/9.11.1/simplepeer.min.js"></script>
     <script>
-        // Replace with your actual Render URL
         const socket = io("https://airbridge-signaling.onrender.com");
-
         const peer = new SimplePeer({ 
             initiator: location.hash === '#1', 
             trickle: false,
@@ -42,26 +39,24 @@
         socket.on('signal', data => peer.signal(data));
 
         peer.on('connect', () => {
-            const s = document.getElementById('status');
-            s.className = 'status-badge connected';
-            s.innerText = 'Connected: Ready to Transfer';
+            document.getElementById('status').className = 'status-badge connected';
+            document.getElementById('status').innerText = 'Connected';
+        });
+
+        peer.on('data', data => {
+            const blob = new Blob([data]);
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'downloaded-file';
+            a.click();
         });
 
         document.getElementById('fileInput').addEventListener('change', (e) => {
             const file = e.target.files[0];
-            document.getElementById('fileInfo').innerText = "Sending: " + file.name;
-            peer.send(file); // This sends the file data directly to the peer
-        });
-
-        peer.on('data', data => {
-             // This receives the data from the other peer
-            const blob = new Blob([data]);
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'received-file'; // You can improve this to capture original filenames
-            a.click();
-            alert("File received successfully!");
+            if (file) {
+                document.getElementById('fileInfo').innerText = "Sending: " + file.name;
+                peer.send(file);
+            }
         });
     </script>
 </body>
