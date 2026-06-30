@@ -53,10 +53,16 @@
             if (isSending || fileQueue.length === 0) return;
             isSending = true;
             const file = fileQueue.shift();
+            
             document.getElementById('progressContainer').style.display = "block";
             const progressBar = document.getElementById('progressBar');
             const encoder = new TextEncoder();
-            peer.send(encoder.encode(JSON.stringify({ type: 'start', name: file.name, mimeType: file.type })));
+            
+            peer.send(encoder.encode(JSON.stringify({ 
+                type: 'start', 
+                name: file.name, 
+                mimeType: file.type 
+            })));
             
             let offset = 0;
             const reader = new FileReader();
@@ -66,6 +72,7 @@
                 peer.send(e.target.result);
                 offset += e.target.result.byteLength;
                 progressBar.style.width = ((offset / file.size) * 100) + "%";
+                
                 if (offset < file.size) setTimeout(sendNext, 40);
                 else {
                     peer.send(encoder.encode(JSON.stringify({ type: 'end' })));
@@ -114,6 +121,7 @@
             processQueue();
         });
         ['dragover', 'dragleave'].forEach(evt => document.getElementById('dropZone').addEventListener(evt, e => e.preventDefault()));
+        
         if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
     </script>
 </body>
