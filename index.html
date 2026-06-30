@@ -7,16 +7,16 @@
     <style>
         :root { --bg: #0f172a; --card: #1e293b; --accent: #8b5cf6; --text: #f8fafc; }
         body { background: var(--bg); color: var(--text); font-family: sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
-        .card { background: #1e293b; padding: 2rem; border-radius: 24px; width: 90%; max-width: 400px; text-align: center; box-shadow: 0 10px 25px rgba(0,0,0,0.3); }
+        .card { background: var(--card); padding: 2rem; border-radius: 24px; width: 90%; max-width: 400px; text-align: center; box-shadow: 0 10px 25px rgba(0,0,0,0.3); }
         .status-badge { padding: 6px 16px; border-radius: 50px; font-size: 0.8rem; font-weight: 600; display: inline-block; margin-bottom: 20px; }
         .connected { background: #10b981; }
-        #downloadBtn { display: none; background: #8b5cf6; color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-weight: 600; margin-top: 10px; width: 100%; }
+        #downloadBtn { display: none; background: var(--accent); color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-weight: 600; margin-top: 10px; width: 100%; }
     </style>
 </head>
 <body>
     <div class="card">
         <h1>AirBridge</h1>
-        <div id="status" class="status-badge">Disconnected</div>
+        <div id="status" class="status-badge" style="background: #ef4444;">Disconnected</div>
         <div onclick="document.getElementById('fileInput').click()" style="cursor:pointer; padding: 20px; border: 2px dashed #475569; border-radius: 12px; margin: 10px 0;">Select File</div>
         <input type="file" id="fileInput" style="display:none">
         <div id="logArea" style="font-size: 0.9rem; color: #cbd5e1; margin-top: 10px;"></div>
@@ -41,13 +41,12 @@
         let fileName = "";
 
         peer.on('data', data => {
-            if (data instanceof ArrayBuffer || ArrayBuffer.isView(data)) {
-                receivedChunks.push(data);
-                document.getElementById('logArea').innerText = "Progress: " + receivedChunks.length + " chunks";
-            } else {
+            // Check if it is a JSON string (using a simple check for '{')
+            if (data[0] === 123) { 
                 const msg = JSON.parse(new TextDecoder().decode(data));
                 if (msg.type === 'start') {
                     receivedChunks = []; fileName = msg.name;
+                    document.getElementById('logArea').innerText = "Receiving...";
                 } else if (msg.type === 'end') {
                     document.getElementById('logArea').innerText = "Transfer Complete!";
                     const btn = document.getElementById('downloadBtn');
@@ -59,15 +58,19 @@
                         a.click();
                     };
                 }
+            } else {
+                receivedChunks.push(data);
+                document.getElementById('logArea').innerText = "Chunks: " + receivedChunks.length;
             }
         });
 
         document.getElementById('fileInput').addEventListener('change', (e) => {
             const file = e.target.files[0];
-            peer.send(JSON.stringify({ type: 'start', name: file.name }));
+            const encoder = new TextEncoder();
+            peer.send(encoder.encode(JSON.stringify({ type: 'start', name: file.name })));
+            
             let offset = 0;
             const reader = new FileReader();
-
             const sendNext = () => {
                 const slice = file.slice(offset, offset + 16384);
                 reader.readAsArrayBuffer(slice);
@@ -77,8 +80,9 @@
                 peer.send(e.target.result);
                 offset += e.target.result.byteLength;
                 document.getElementById('logArea').innerText = `Sending: ${Math.round((offset/file.size)*100)}%`;
-                if (offset < file.size) setTimeout(sendNext, 20);
-                else peer.send(JSON.stringify({ type: 'end' }));
+                
+                if (offset < file.size) setTimeout(sendNext, 40);
+                else setTimeout(() => peer.send(encoder.encode(JSON.stringify({ type: 'end' }))), 500);
             };
             sendNext();
         });
