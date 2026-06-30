@@ -11,6 +11,7 @@
         .status-badge { padding: 6px 16px; border-radius: 50px; font-size: 0.8rem; font-weight: 600; display: inline-block; margin-bottom: 20px; }
         .connected { background: #10b981; }
         .drop-zone { border: 2px dashed #475569; padding: 40px; border-radius: 16px; cursor: pointer; margin: 20px 0; }
+        button { background: var(--accent); color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: 600; margin-top: 10px; }
     </style>
 </head>
 <body>
@@ -21,57 +22,55 @@
             <p>Click to select file</p>
             <input type="file" id="fileInput" style="display:none">
         </div>
-        <div id="fileInfo"></div>
+        <div id="logArea"></div>
     </div>
 
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/simple-peer/9.11.1/simplepeer.min.js"></script>
     <script>
-    const log = (msg) => {
-        const div = document.createElement('div');
-        div.innerText = "> " + msg;
-        document.body.appendChild(div);
-        console.log(msg);
-    };
+        const socket = io("https://airbridge-signaling.onrender.com");
+        const peer = new SimplePeer({ 
+            initiator: location.hash === '#1', 
+            trickle: false,
+            config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }
+        });
 
-    const socket = io("https://airbridge-signaling.onrender.com");
-    const peer = new SimplePeer({ 
-        initiator: location.hash === '#1', 
-        trickle: false,
-        config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }
-    });
+        peer.on('signal', data => socket.emit('signal', data));
+        socket.on('signal', data => peer.signal(data));
 
-    peer.on('signal', data => {
-        socket.emit('signal', data);
-        log("Signaling...");
-    });
+        peer.on('connect', () => {
+            document.getElementById('status').className = 'status-badge connected';
+            document.getElementById('status').innerText = 'Connected';
+        });
 
-    socket.on('signal', data => peer.signal(data));
+        // Receiving logic
+        peer.on('data', data => {
+            const message = JSON.parse(data);
+            const btn = document.createElement('button');
+            btn.innerText = "Download " + message.name;
+            btn.onclick = () => {
+                const link = document.createElement('a');
+                link.href = message.data; // The base64 data
+                link.download = message.name;
+                link.click();
+            };
+            document.querySelector('.card').appendChild(btn);
+        });
 
-    peer.on('connect', () => {
-        document.getElementById('status').innerText = 'Connected';
-        log("P2P Connected!");
-    });
-
-    peer.on('data', data => {
-        log("Data received!");
-        const blob = new Blob([data]);
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = 'file';
-        a.innerText = "CLICK TO DOWNLOAD";
-        a.style.display = "block";
-        a.style.marginTop = "20px";
-        document.querySelector('.card').appendChild(a);
-    });
-
-    document.getElementById('fileInput').addEventListener('change', (e) => {
-        const file = e.target.files[0];
-        if (file) {
-            log("Sending: " + file.name);
-            peer.send(file);
-        }
-    });
+        // Sending logic
+        document.getElementById('fileInput').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const payload = JSON.stringify({
+                    name: file.name,
+                    data: event.target.result // Base64 data
+                });
+                peer.send(payload);
+                document.getElementById('logArea').innerText = "Sent: " + file.name;
+            };
+            reader.readAsDataURL(file);
+        });
     </script>
 </body>
 </html>
