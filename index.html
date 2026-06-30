@@ -12,7 +12,7 @@
         .disconnected { background: #ef4444; }
         .connected { background: #10b981; }
         .drop-zone { border: 2px dashed #475569; padding: 40px; border-radius: 16px; cursor: pointer; margin: 20px 0; }
-        button { background: var(--accent); color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-weight: 600; margin-top: 10px; width: 100%; }
+        #downloadBtn { display: none; background: var(--accent); color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-weight: 600; margin-top: 10px; width: 100%; }
     </style>
 </head>
 <body>
@@ -24,18 +24,15 @@
             <input type="file" id="fileInput" style="display:none">
         </div>
         <div id="logArea" style="font-size: 0.8rem; margin-top: 10px;"></div>
+        <button id="downloadBtn">Download File</button>
     </div>
 
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/simple-peer/9.11.1/simplepeer.min.js"></script>
     <script>
         const socket = io("https://airbridge-signaling.onrender.com");
-        const peer = new SimplePeer({ 
-            initiator: location.hash === '#1', 
-            trickle: false,
-            channelConfig: { ordered: true } 
-        });
-
+        const peer = new SimplePeer({ initiator: location.hash === '#1', trickle: false, channelConfig: { ordered: true } });
+        
         peer.on('signal', data => socket.emit('signal', data));
         socket.on('signal', data => peer.signal(data));
 
@@ -56,47 +53,36 @@
                     document.getElementById('logArea').innerText = "Receiving: " + fileName;
                 } else if (msg.type === 'end') {
                     document.getElementById('logArea').innerText = "Transfer Complete!";
-                    const blob = new Blob(receivedChunks);
-                    const btn = document.createElement('button');
-                    btn.innerText = "Download " + fileName;
+                    const btn = document.getElementById('downloadBtn');
+                    btn.style.display = "block";
                     btn.onclick = () => {
+                        const blob = new Blob(receivedChunks);
                         const a = document.createElement('a');
                         a.href = URL.createObjectURL(blob);
                         a.download = fileName;
                         a.click();
                     };
-                    document.querySelector('.card').appendChild(btn);
                 }
             } else {
                 receivedChunks.push(data);
-                document.getElementById('logArea').innerText = "Received chunks: " + receivedChunks.length;
+                document.getElementById('logArea').innerText = "Progress: " + receivedChunks.length + " chunks";
             }
         });
 
         document.getElementById('fileInput').addEventListener('change', (e) => {
             const file = e.target.files[0];
             peer.send(JSON.stringify({ type: 'start', name: file.name }));
-            
-            const reader = new FileReader();
             let offset = 0;
             const chunkSize = 16384;
+            const reader = new FileReader();
 
-            const readNext = () => {
-                const slice = file.slice(offset, offset + chunkSize);
-                reader.readAsArrayBuffer(slice);
-            };
-
+            const readNext = () => reader.readAsArrayBuffer(file.slice(offset, offset + chunkSize));
             reader.onload = (e) => {
                 peer.send(e.target.result);
                 offset += e.target.result.byteLength;
                 document.getElementById('logArea').innerText = `Sending: ${Math.round((offset/file.size)*100)}%`;
-                
-                if (offset < file.size) {
-                    // Small delay to ensure the control messages don't get blocked
-                    setTimeout(readNext, 50);
-                } else {
-                    peer.send(JSON.stringify({ type: 'end', name: file.name }));
-                }
+                if (offset < file.size) setTimeout(readNext, 30);
+                else peer.send(JSON.stringify({ type: 'end', name: file.name }));
             };
             readNext();
         });
